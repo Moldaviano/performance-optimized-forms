@@ -1,77 +1,81 @@
 # RenderingPOC
 
-A **Proof of Concept** Angular application that demonstrates how to dynamically generate complex multi-section forms at runtime from a declarative JSON-based schema, without writing HTML for each field manually.
+**Proof of Concept** Angular per analizzare e testare l'utilizzo degli **accordion** come strategia di **lazy rendering** al fine di migliorare le performance di caricamento di pagine web che contengono un numero elevato di form e campi compilabili.
 
-## Table of Contents
+## Indice
 
-- [Overview](#overview)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Architecture](#architecture)
-  - [Data Model](#data-model)
-  - [Data Flow](#data-flow)
-  - [Form Generation](#form-generation)
-  - [Field Types](#field-types)
-  - [Dependency System](#dependency-system)
-  - [Validation](#validation)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Development Server](#development-server)
+- [Obiettivo](#obiettivo)
+- [Stack Tecnologico](#stack-tecnologico)
+- [Struttura del Progetto](#struttura-del-progetto)
+- [Architettura](#architettura)
+  - [Modello dei Dati](#modello-dei-dati)
+  - [Flusso dei Dati](#flusso-dei-dati)
+  - [Generazione dei Form](#generazione-dei-form)
+  - [Tipi di Campo](#tipi-di-campo)
+  - [Sistema di Dipendenze](#sistema-di-dipendenze)
+  - [Validazione](#validazione)
+- [Avvio del Progetto](#avvio-del-progetto)
+  - [Prerequisiti](#prerequisiti)
+  - [Installazione](#installazione)
+  - [Server di Sviluppo](#server-di-sviluppo)
   - [Build](#build)
-  - [Running Unit Tests](#running-unit-tests)
-- [Configuration](#configuration)
-- [Known Limitations & TODOs](#known-limitations--todos)
+  - [Esecuzione dei Test](#esecuzione-dei-test)
+- [Configurazione](#configurazione)
+- [Limitazioni Note e TODO](#limitazioni-note-e-todo)
 
 ---
 
-## Overview
+## Obiettivo
 
-`RenderingPOC` explores the challenge of rendering **data-driven forms** where the structure (sections, fields, types, validation rules, visibility conditions) is defined entirely by a server-provided schema. This approach avoids hard-coding form layouts and enables forms to be updated without frontend changes.
+Il progetto nasce dall'esigenza di gestire pagine web che presentano un **numero elevato di sezioni form** (potenzialmente decine), ciascuna con molti campi compilabili. Il rendering simultaneo di tutti i componenti al caricamento della pagina provoca un degrado significativo delle performance.
 
-The current implementation generates up to **50 sections × 20 fields** per run, each section rendered by a dedicated component that builds a fully reactive `FormArray` at runtime.
+L'approccio studiato in questo POC è l'utilizzo degli **accordion**: ogni sezione form è racchiusa in un pannello collassabile e il contenuto (i campi) viene renderizzato **solo al momento dell'apertura** del pannello, evitando di istanziare nell'albero del DOM centinaia di `FormControl` e componenti che l'utente potrebbe non utilizzare mai.
+
+**Domanda di ricerca:** l'utilizzo degli accordion per il lazy rendering è una soluzione percorribile e misurabile per migliorare le performance su un numero importante di form in una singola pagina?
+
+Il `DataFlowService` simula un caso estremo generando fino a **50 sezioni × 20 campi** (1000 campi totali) per permettere test significativi.
 
 ---
 
-## Tech Stack
+## Stack Tecnologico
 
-| Technology | Version | Role |
+| Tecnologia | Versione | Ruolo |
 |---|---|---|
-| [Angular](https://angular.io/) | 14 | SPA framework |
-| [Angular Reactive Forms](https://angular.io/guide/reactive-forms) | 14 | Dynamic form management |
-| [RxJS](https://rxjs.dev/) | ~7.5 | Reactive dependency wiring |
-| [@ng-select/ng-select](https://github.com/ng-select/ng-select) | ^9 | Multi-select / select dropdowns |
-| [TypeScript](https://www.typescriptlang.org/) | ~4.7 | Type safety across the schema |
-| [Karma](https://karma-runner.github.io/) + Jasmine | ~6.3 / ~4.1 | Unit testing |
+| [Angular](https://angular.io/) | 14 | Framework SPA |
+| [Angular Reactive Forms](https://angular.io/guide/reactive-forms) | 14 | Gestione form dinamici |
+| [RxJS](https://rxjs.dev/) | ~7.5 | Wiring reattivo delle dipendenze tra campi |
+| [@ng-select/ng-select](https://github.com/ng-select/ng-select) | ^9 | Dropdown select e multi-select |
+| [TypeScript](https://www.typescriptlang.org/) | ~4.7 | Tipizzazione forte dello schema dati |
+| [Karma](https://karma-runner.github.io/) + Jasmine | ~6.3 / ~4.1 | Test unitari |
 
 ---
 
-## Project Structure
+## Struttura del Progetto
 
 ```
 src/
 └── app/
-    ├── app.component.*             # Root shell — renders <app-home>
-    ├── app-routing.module.ts       # Routing module (no routes currently defined)
-    ├── app.module.ts               # Root NgModule
+    ├── app.component.*             # Shell radice — renderizza <app-home>
+    ├── app-routing.module.ts       # Modulo di routing (nessuna route definita al momento)
+    ├── app.module.ts               # NgModule radice
     │
     ├── pages/
-    │   └── home/                   # Home page — renders <app-auto-generated-form>
+    │   └── home/                   # Pagina principale — renderizza <app-auto-generated-form>
     │
     ├── services/
-    │   └── data-flow.service.ts    # Generates mock Section[] data (simulates server response)
+    │   └── data-flow.service.ts    # Genera dati mock Section[] (simula risposta dal server)
     │
     ├── shared/
     │   ├── sharedTypes/
-    │   │   └── sectionType.ts      # All domain types: Section, Field, FieldType, conditions, etc.
+    │   │   └── sectionType.ts      # Tutti i tipi di dominio: Section, Field, FieldType, condizioni, ecc.
     │   │
     │   ├── auto-generated-form/
-    │   │   ├── auto-generated-form.component.*          # Loads sections, iterates over them
+    │   │   ├── auto-generated-form.component.*          # Carica le sezioni e le itera
     │   │   └── auto-generated-form-section/
-    │   │       └── auto-generated-form-section.component.*  # Core: builds FormArray, handles logic
+    │   │       └── auto-generated-form-section.component.*  # Nucleo: costruisce il FormArray e gestisce la logica
     │   │
     │   └── directives/
-    │       └── validators/         # Custom Angular validator directives
+    │       └── validators/         # Direttive Angular per la validazione custom
     │           ├── date-max-validator.directive.ts
     │           ├── date-min-validator.directive.ts
     │           ├── string-check-validator.directive.ts
@@ -79,18 +83,18 @@ src/
     │           └── string-min-length-validator.directive.ts
     │
     └── fileTest/
-        └── test_renderingPOC.ts    # Static fixture data (mirrors a real server JSON response)
+        └── test_renderingPOC.ts    # Dati statici di fixture (replica una risposta JSON reale dal server)
 ```
 
 ---
 
-## Architecture
+## Architettura
 
-### Data Model
+### Modello dei Dati
 
-All types are defined in `src/app/shared/sharedTypes/sectionType.ts`.
+Tutti i tipi sono definiti in `src/app/shared/sharedTypes/sectionType.ts`.
 
-A form is described as an array of **`Section`** objects:
+Un form è descritto come un array di oggetti **`Section`**:
 
 ```ts
 type Section = {
@@ -100,88 +104,84 @@ type Section = {
 };
 ```
 
-Each **`Field`** within a section carries its own type, label, validation config, and optional dependency info:
+Ogni **`Field`** all'interno di una sezione contiene tipo, label, configurazione di validazione e info opzionali sulle dipendenze:
 
 ```ts
 type Field = {
   fieldName: string;
   label: LangCode;
   fieldType: FieldType;
-  numVal?: numericProp;        // min/max for NUMERIC
+  numVal?: numericProp;        // min/max per NUMERIC
   textVal?: stringProp;        // isName, isEmail, isPass, min/maxLength
-  dateVal?: dateProp;          // min/max date
-  selectableItems?: string[];  // options for SELECT, MULTI_SELECT, RADIO, CHECKBOX
+  dateVal?: dateProp;          // data min/max
+  selectableItems?: string[];  // opzioni per SELECT, MULTI_SELECT, RADIO, CHECKBOX
   mandatory: boolean;
   order: number;
-  depends?: dependent;         // visibility / enable-disable dependency
+  depends?: dependent;         // dipendenza di visibilità / abilitazione
   value: string | string[];
 };
 ```
 
-Supported **`FieldType`** values:
-
-`TEXT` | `TEXT_AREA` | `NUMERIC` | `DATE` | `RADIO` | `SELECT` | `MULTI_SELECT` | `CHECKBOX` | `PASSWORD`
-
 ---
 
-### Data Flow
+### Flusso dei Dati
 
 ```
 DataFlowService.getFakeData()
         │
         ▼
-AutoGeneratedFormComponent          ← receives Section[]
+AutoGeneratedFormComponent          ← riceve Section[]
         │
-        ├── *ngFor over sections
+        ├── *ngFor sulle sezioni
         ▼
-AutoGeneratedFormSectionComponent   ← receives one Section
+AutoGeneratedFormSectionComponent   ← riceve una singola Section
         │
-        ├── builds FormArray
-        ├── applies validators
-        └── wires field dependencies via RxJS merge()
+        ├── costruisce FormArray
+        ├── applica i validatori
+        └── collega le dipendenze tra campi via RxJS merge()
 ```
 
-`DataFlowService` currently acts as a **mock backend**: it builds a `Section[]` with random field combinations drawn from 11 field templates. To switch to a real backend, replace `getFakeData()` with an HTTP call returning the same `Section[]` shape.
+`DataFlowService` funge da **backend simulato**: costruisce una `Section[]` con combinazioni casuali di campi scelte da 11 template predefiniti. Per integrare un backend reale è sufficiente sostituire `getFakeData()` con una chiamata HTTP che restituisca la stessa struttura `Section[]`.
 
-A static fixture (`src/app/fileTest/test_renderingPOC.ts`) provides a stable, predictable `Section[]` for unit testing or manual inspection, mirroring what an actual server JSON response would look like.
-
----
-
-### Form Generation
-
-`AutoGeneratedFormSectionComponent` is the core engine. For each section it:
-
-1. **Sorts** fields by their `order` property and re-indexes them.
-2. **Creates** a `FormControl` per field (inside a `FormArray`).
-3. **Maps** `fieldType` to the correct HTML `type` attribute.
-4. **Attaches** synchronous validators based on `textVal`, `numVal`, `dateVal`, and `mandatory`.
-5. **Wires** enable/disable logic for dependent fields using `RxJS merge()` on the parent controls' `valueChanges`.
+Il file `src/app/fileTest/test_renderingPOC.ts` fornisce dati statici e deterministici utili per i test unitari o per l'ispezione manuale, replicando esattamente il formato di risposta JSON atteso dal server.
 
 ---
 
-### Field Types
+### Generazione dei Form
 
-| `fieldType` | Rendered as | Notes |
+`AutoGeneratedFormSectionComponent` è il motore principale. Per ogni sezione:
+
+1. **Ordina** i campi tramite la proprietà `order` e li reindicizza.
+2. **Crea** un `FormControl` per ciascun campo (all'interno di un `FormArray`).
+3. **Mappa** il `fieldType` al corretto attributo HTML `type`.
+4. **Associa** validatori sincroni basati su `textVal`, `numVal`, `dateVal` e `mandatory`.
+5. **Collega** la logica di abilitazione/disabilitazione dei campi dipendenti tramite `RxJS merge()` sugli eventi `valueChanges` dei controlli padre.
+
+---
+
+### Tipi di Campo
+
+| `fieldType` | Reso come | Note |
 |---|---|---|
-| `TEXT` | `<input type="text">` | Supports `isName`, `isEmail` sub-types |
+| `TEXT` | `<input type="text">` | Supporta i sotto-tipi `isName`, `isEmail` |
 | `TEXT_AREA` | `<textarea>` | |
-| `NUMERIC` | `<input type="number">` | Supports `minVal` / `maxVal` |
-| `DATE` | `<input type="date">` | Supports `min` / `max` date |
-| `PASSWORD` | `<input type="password">` | Toggle visibility supported |
-| `SELECT` | `<ng-select>` (single) | Items from `selectableItems` |
-| `MULTI_SELECT` | `<ng-select multiple>` | Items from `selectableItems` |
-| `RADIO` | `<input type="radio">` group | Items from `selectableItems` |
-| `CHECKBOX` | `<input type="checkbox">` group | Items from `selectableItems` |
+| `NUMERIC` | `<input type="number">` | Supporta `minVal` / `maxVal` |
+| `DATE` | `<input type="date">` | Supporta data minima e massima |
+| `PASSWORD` | `<input type="password">` | Toggle di visibilità supportato |
+| `SELECT` | `<ng-select>` (singolo) | Opzioni da `selectableItems` |
+| `MULTI_SELECT` | `<ng-select multiple>` | Opzioni da `selectableItems` |
+| `RADIO` | gruppo `<input type="radio">` | Opzioni da `selectableItems` |
+| `CHECKBOX` | gruppo `<input type="checkbox">` | Opzioni da `selectableItems` |
 
 ---
 
-### Dependency System
+### Sistema di Dipendenze
 
-A field can declare a `depends` property to express one of two behaviours:
+Un campo può dichiarare una proprietà `depends` per esprimere uno di due comportamenti:
 
-**1. Dependent on other fields (`isDependent: true`)**
+**1. Dipendente da altri campi (`isDependent: true`)**
 
-The field is **disabled** until all fields listed in `dependsFrom[]` have a non-empty value.
+Il campo rimane **disabilitato** finché tutti i campi elencati in `dependsFrom[]` non hanno un valore non vuoto.
 
 ```ts
 depends: {
@@ -190,9 +190,9 @@ depends: {
 }
 ```
 
-**2. Conditional visibility (`isDependent: false`)**
+**2. Visibilità condizionale (`isDependent: false`)**
 
-The field's visibility is controlled by a `conditionForVisibility` that compares two factors using a `comparator`:
+La visibilità del campo è controllata da una `conditionForVisibility` che confronta due fattori tramite un operatore di confronto (`comparator`):
 
 ```ts
 depends: {
@@ -207,29 +207,29 @@ depends: {
 }
 ```
 
-Supported comparators: `==` `===` `!=` `<` `>` `<=` `>=` `isIncludedIn`
+Comparatori supportati: `==` `===` `!=` `<` `>` `<=` `>=` `isIncludedIn`
 
 ---
 
-### Validation
+### Validazione
 
-Validation is applied at `FormControl` level inside `AutoGeneratedFormSectionComponent` and through custom **Angular validator directives**:
+La validazione è applicata a livello di `FormControl` all'interno di `AutoGeneratedFormSectionComponent` e tramite **direttive Angular custom**:
 
-| Directive | Validates |
+| Direttiva | Cosa valida |
 |---|---|
-| `StringCheckValidatorDirective` | Text format (name, email, etc.) |
-| `StringMinLengthValidatorDirective` | Minimum string length |
-| `StringMaxLengthValidatorDirective` | Maximum string length |
-| `DateMinValidatorDirective` | Minimum allowed date |
-| `DateMaxValidatorDirective` | Maximum allowed date |
+| `StringCheckValidatorDirective` | Formato testo (nome, email, ecc.) |
+| `StringMinLengthValidatorDirective` | Lunghezza minima della stringa |
+| `StringMaxLengthValidatorDirective` | Lunghezza massima della stringa |
+| `DateMinValidatorDirective` | Data minima consentita |
+| `DateMaxValidatorDirective` | Data massima consentita |
 
-Required fields are also validated reactively through `Validators.required` when `mandatory: true`.
+I campi con `mandatory: true` vengono validati tramite `Validators.required` in modo reattivo.
 
 ---
 
-## Getting Started
+## Avvio del Progetto
 
-### Prerequisites
+### Prerequisiti
 
 - [Node.js](https://nodejs.org/) ≥ 16
 - [Angular CLI](https://angular.io/cli) ~14
@@ -238,7 +238,7 @@ Required fields are also validated reactively through `Validators.required` when
 npm install -g @angular/cli@14
 ```
 
-### Installation
+### Installazione
 
 ```bash
 git clone <repository-url>
@@ -246,15 +246,15 @@ cd renderingPOC-master
 npm install
 ```
 
-### Development Server
+### Server di Sviluppo
 
 ```bash
 npm start
-# or
+# oppure
 ng serve
 ```
 
-Navigate to `http://localhost:4200/`. The app reloads automatically on source file changes.
+Navigare su `http://localhost:4200/`. L'applicazione si ricarica automaticamente ad ogni modifica ai file sorgente.
 
 ### Build
 
@@ -262,43 +262,43 @@ Navigate to `http://localhost:4200/`. The app reloads automatically on source fi
 ng build
 ```
 
-Production build:
+Build di produzione:
 
 ```bash
 ng build --configuration production
 ```
 
-Build artifacts are placed in the `dist/` directory.
+Gli artefatti della build vengono salvati nella cartella `dist/`.
 
-### Running Unit Tests
+### Esecuzione dei Test
 
 ```bash
 ng test
 ```
 
-Tests run via [Karma](https://karma-runner.github.io) with the Jasmine framework.
+I test vengono eseguiti tramite [Karma](https://karma-runner.github.io) con il framework Jasmine.
 
 ---
 
-## Configuration
+## Configurazione
 
-| File | Purpose |
+| File | Scopo |
 |---|---|
-| `angular.json` | Angular CLI workspace configuration |
-| `tsconfig.json` | Base TypeScript configuration |
-| `tsconfig.app.json` | App-specific TS config |
-| `tsconfig.spec.json` | Test-specific TS config |
-| `src/environments/environment.ts` | Development environment variables |
-| `src/environments/environment.prod.ts` | Production environment variables |
+| `angular.json` | Configurazione workspace Angular CLI |
+| `tsconfig.json` | Configurazione TypeScript base |
+| `tsconfig.app.json` | Configurazione TS specifica per l'app |
+| `tsconfig.spec.json` | Configurazione TS specifica per i test |
+| `src/environments/environment.ts` | Variabili d'ambiente per lo sviluppo |
+| `src/environments/environment.prod.ts` | Variabili d'ambiente per la produzione |
 
-To point the form data loader at a real API, modify `DataFlowService` to inject `HttpClient` and replace `getFakeData()` with an HTTP request returning `Section[]`.
+Per collegare il loader dei dati a una API reale, modificare `DataFlowService` iniettando `HttpClient` e sostituendo `getFakeData()` con una chiamata HTTP che restituisca `Section[]`.
 
 ---
 
-## Known Limitations & TODOs
+## Limitazioni Note e TODO
 
-- **No routing:** `AppRoutingModule` is declared but the `Routes` array is empty. Future pages will need routes added here.
-- **Mock data only:** `DataFlowService` generates random data locally. Integration with a real backend requires replacing `getFakeData()` with an HTTP call.
-- **Unused import in `sectionType.ts`:** `R3PipeDependencyMetadata` from `@angular/compiler` is imported but never used — safe to remove.
-- **`AutoGeneratedFormComponent`:** The `@Input()` decorator is imported but not applied to any input property — can be cleaned up.
-- **No end-to-end tests:** `ng e2e` requires adding an e2e testing package (e.g. Cypress or Playwright) manually.
+- **Nessuna route definita:** `AppRoutingModule` è dichiarato ma l'array `Routes` è vuoto. Le future pagine richiederanno l'aggiunta delle route.
+- **Solo dati mock:** `DataFlowService` genera dati casuali in locale. L'integrazione con un backend reale richiede la sostituzione di `getFakeData()` con una chiamata HTTP.
+- **Import inutilizzato in `sectionType.ts`:** `R3PipeDependencyMetadata` da `@angular/compiler` è importato ma mai utilizzato — sicuro da rimuovere.
+- **`AutoGeneratedFormComponent`:** Il decoratore `@Input()` è importato ma non applicato ad alcuna proprietà — da rimuovere.
+- **Nessun test end-to-end:** `ng e2e` richiede l'aggiunta manuale di un package dedicato (es. Cypress o Playwright).
