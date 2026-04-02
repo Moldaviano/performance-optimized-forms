@@ -1,27 +1,304 @@
 # RenderingPOC
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 14.0.0.
+A **Proof of Concept** Angular application that demonstrates how to dynamically generate complex multi-section forms at runtime from a declarative JSON-based schema, without writing HTML for each field manually.
 
-## Development server
+## Table of Contents
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+- [Overview](#overview)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Architecture](#architecture)
+  - [Data Model](#data-model)
+  - [Data Flow](#data-flow)
+  - [Form Generation](#form-generation)
+  - [Field Types](#field-types)
+  - [Dependency System](#dependency-system)
+  - [Validation](#validation)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Development Server](#development-server)
+  - [Build](#build)
+  - [Running Unit Tests](#running-unit-tests)
+- [Configuration](#configuration)
+- [Known Limitations & TODOs](#known-limitations--todos)
 
-## Code scaffolding
+---
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+## Overview
 
-## Build
+`RenderingPOC` explores the challenge of rendering **data-driven forms** where the structure (sections, fields, types, validation rules, visibility conditions) is defined entirely by a server-provided schema. This approach avoids hard-coding form layouts and enables forms to be updated without frontend changes.
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+The current implementation generates up to **50 sections × 20 fields** per run, each section rendered by a dedicated component that builds a fully reactive `FormArray` at runtime.
 
-## Running unit tests
+---
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+## Tech Stack
 
-## Running end-to-end tests
+| Technology | Version | Role |
+|---|---|---|
+| [Angular](https://angular.io/) | 14 | SPA framework |
+| [Angular Reactive Forms](https://angular.io/guide/reactive-forms) | 14 | Dynamic form management |
+| [RxJS](https://rxjs.dev/) | ~7.5 | Reactive dependency wiring |
+| [@ng-select/ng-select](https://github.com/ng-select/ng-select) | ^9 | Multi-select / select dropdowns |
+| [TypeScript](https://www.typescriptlang.org/) | ~4.7 | Type safety across the schema |
+| [Karma](https://karma-runner.github.io/) + Jasmine | ~6.3 / ~4.1 | Unit testing |
 
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
+---
 
-## Further help
+## Project Structure
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+```
+src/
+└── app/
+    ├── app.component.*             # Root shell — renders <app-home>
+    ├── app-routing.module.ts       # Routing module (no routes currently defined)
+    ├── app.module.ts               # Root NgModule
+    │
+    ├── pages/
+    │   └── home/                   # Home page — renders <app-auto-generated-form>
+    │
+    ├── services/
+    │   └── data-flow.service.ts    # Generates mock Section[] data (simulates server response)
+    │
+    ├── shared/
+    │   ├── sharedTypes/
+    │   │   └── sectionType.ts      # All domain types: Section, Field, FieldType, conditions, etc.
+    │   │
+    │   ├── auto-generated-form/
+    │   │   ├── auto-generated-form.component.*          # Loads sections, iterates over them
+    │   │   └── auto-generated-form-section/
+    │   │       └── auto-generated-form-section.component.*  # Core: builds FormArray, handles logic
+    │   │
+    │   └── directives/
+    │       └── validators/         # Custom Angular validator directives
+    │           ├── date-max-validator.directive.ts
+    │           ├── date-min-validator.directive.ts
+    │           ├── string-check-validator.directive.ts
+    │           ├── string-max-length-validator.directive.ts
+    │           └── string-min-length-validator.directive.ts
+    │
+    └── fileTest/
+        └── test_renderingPOC.ts    # Static fixture data (mirrors a real server JSON response)
+```
+
+---
+
+## Architecture
+
+### Data Model
+
+All types are defined in `src/app/shared/sharedTypes/sectionType.ts`.
+
+A form is described as an array of **`Section`** objects:
+
+```ts
+type Section = {
+  name: LangCode;   // { it: string; en: string }
+  order: number;
+  fields: Field[];
+};
+```
+
+Each **`Field`** within a section carries its own type, label, validation config, and optional dependency info:
+
+```ts
+type Field = {
+  fieldName: string;
+  label: LangCode;
+  fieldType: FieldType;
+  numVal?: numericProp;        // min/max for NUMERIC
+  textVal?: stringProp;        // isName, isEmail, isPass, min/maxLength
+  dateVal?: dateProp;          // min/max date
+  selectableItems?: string[];  // options for SELECT, MULTI_SELECT, RADIO, CHECKBOX
+  mandatory: boolean;
+  order: number;
+  depends?: dependent;         // visibility / enable-disable dependency
+  value: string | string[];
+};
+```
+
+Supported **`FieldType`** values:
+
+`TEXT` | `TEXT_AREA` | `NUMERIC` | `DATE` | `RADIO` | `SELECT` | `MULTI_SELECT` | `CHECKBOX` | `PASSWORD`
+
+---
+
+### Data Flow
+
+```
+DataFlowService.getFakeData()
+        │
+        ▼
+AutoGeneratedFormComponent          ← receives Section[]
+        │
+        ├── *ngFor over sections
+        ▼
+AutoGeneratedFormSectionComponent   ← receives one Section
+        │
+        ├── builds FormArray
+        ├── applies validators
+        └── wires field dependencies via RxJS merge()
+```
+
+`DataFlowService` currently acts as a **mock backend**: it builds a `Section[]` with random field combinations drawn from 11 field templates. To switch to a real backend, replace `getFakeData()` with an HTTP call returning the same `Section[]` shape.
+
+A static fixture (`src/app/fileTest/test_renderingPOC.ts`) provides a stable, predictable `Section[]` for unit testing or manual inspection, mirroring what an actual server JSON response would look like.
+
+---
+
+### Form Generation
+
+`AutoGeneratedFormSectionComponent` is the core engine. For each section it:
+
+1. **Sorts** fields by their `order` property and re-indexes them.
+2. **Creates** a `FormControl` per field (inside a `FormArray`).
+3. **Maps** `fieldType` to the correct HTML `type` attribute.
+4. **Attaches** synchronous validators based on `textVal`, `numVal`, `dateVal`, and `mandatory`.
+5. **Wires** enable/disable logic for dependent fields using `RxJS merge()` on the parent controls' `valueChanges`.
+
+---
+
+### Field Types
+
+| `fieldType` | Rendered as | Notes |
+|---|---|---|
+| `TEXT` | `<input type="text">` | Supports `isName`, `isEmail` sub-types |
+| `TEXT_AREA` | `<textarea>` | |
+| `NUMERIC` | `<input type="number">` | Supports `minVal` / `maxVal` |
+| `DATE` | `<input type="date">` | Supports `min` / `max` date |
+| `PASSWORD` | `<input type="password">` | Toggle visibility supported |
+| `SELECT` | `<ng-select>` (single) | Items from `selectableItems` |
+| `MULTI_SELECT` | `<ng-select multiple>` | Items from `selectableItems` |
+| `RADIO` | `<input type="radio">` group | Items from `selectableItems` |
+| `CHECKBOX` | `<input type="checkbox">` group | Items from `selectableItems` |
+
+---
+
+### Dependency System
+
+A field can declare a `depends` property to express one of two behaviours:
+
+**1. Dependent on other fields (`isDependent: true`)**
+
+The field is **disabled** until all fields listed in `dependsFrom[]` have a non-empty value.
+
+```ts
+depends: {
+  isDependent: true,
+  dependsFrom: ['fieldName_A', 'fieldName_B'],
+}
+```
+
+**2. Conditional visibility (`isDependent: false`)**
+
+The field's visibility is controlled by a `conditionForVisibility` that compares two factors using a `comparator`:
+
+```ts
+depends: {
+  isDependent: false,
+  fieldStatus: {
+    conditionForVisibility: {
+      firstComparedFactor: 4,
+      comparator: '<',   // ==, ===, !=, <, >, <=, >=, isIncludedIn
+      secondComparedFactor: 5,
+    },
+  },
+}
+```
+
+Supported comparators: `==` `===` `!=` `<` `>` `<=` `>=` `isIncludedIn`
+
+---
+
+### Validation
+
+Validation is applied at `FormControl` level inside `AutoGeneratedFormSectionComponent` and through custom **Angular validator directives**:
+
+| Directive | Validates |
+|---|---|
+| `StringCheckValidatorDirective` | Text format (name, email, etc.) |
+| `StringMinLengthValidatorDirective` | Minimum string length |
+| `StringMaxLengthValidatorDirective` | Maximum string length |
+| `DateMinValidatorDirective` | Minimum allowed date |
+| `DateMaxValidatorDirective` | Maximum allowed date |
+
+Required fields are also validated reactively through `Validators.required` when `mandatory: true`.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) ≥ 16
+- [Angular CLI](https://angular.io/cli) ~14
+
+```bash
+npm install -g @angular/cli@14
+```
+
+### Installation
+
+```bash
+git clone <repository-url>
+cd renderingPOC-master
+npm install
+```
+
+### Development Server
+
+```bash
+npm start
+# or
+ng serve
+```
+
+Navigate to `http://localhost:4200/`. The app reloads automatically on source file changes.
+
+### Build
+
+```bash
+ng build
+```
+
+Production build:
+
+```bash
+ng build --configuration production
+```
+
+Build artifacts are placed in the `dist/` directory.
+
+### Running Unit Tests
+
+```bash
+ng test
+```
+
+Tests run via [Karma](https://karma-runner.github.io) with the Jasmine framework.
+
+---
+
+## Configuration
+
+| File | Purpose |
+|---|---|
+| `angular.json` | Angular CLI workspace configuration |
+| `tsconfig.json` | Base TypeScript configuration |
+| `tsconfig.app.json` | App-specific TS config |
+| `tsconfig.spec.json` | Test-specific TS config |
+| `src/environments/environment.ts` | Development environment variables |
+| `src/environments/environment.prod.ts` | Production environment variables |
+
+To point the form data loader at a real API, modify `DataFlowService` to inject `HttpClient` and replace `getFakeData()` with an HTTP request returning `Section[]`.
+
+---
+
+## Known Limitations & TODOs
+
+- **No routing:** `AppRoutingModule` is declared but the `Routes` array is empty. Future pages will need routes added here.
+- **Mock data only:** `DataFlowService` generates random data locally. Integration with a real backend requires replacing `getFakeData()` with an HTTP call.
+- **Unused import in `sectionType.ts`:** `R3PipeDependencyMetadata` from `@angular/compiler` is imported but never used — safe to remove.
+- **`AutoGeneratedFormComponent`:** The `@Input()` decorator is imported but not applied to any input property — can be cleaned up.
+- **No end-to-end tests:** `ng e2e` requires adding an e2e testing package (e.g. Cypress or Playwright) manually.
