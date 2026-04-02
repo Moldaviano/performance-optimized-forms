@@ -1,0 +1,215 @@
+<div *ngIf="section" class="section-container">
+  <div class="section">
+    <!-- Parte superiore della section in cui verrà visualizzato il nome di essa -->
+    <div class="section-name-container" (click)="showAccordion()">
+      <p class="section-name">{{ section.name.en || section.name.it }}</p>
+    </div>
+    <!-- Qui dentro verra visualizzato il form con dentro i vari field di input -->
+    <!-- Show controlla se il corpo della section è visibile o meno, rimuovere
+                ngIf per disabilitare-->
+    <form *ngIf="show" novalidate class="field-container form">
+      <!-- Viene creata una label e un input per ogni field -->
+      <div *ngFor="let field of section.fields" class="field">
+        <!--
+                    Questo field viene mostrato solo se il fieldType è diverso da { "select" | "radio" | "checkbox" | "textarea" } 
+                -->
+        <div
+          class="field-inner"
+          *ngIf="
+            field.fieldType != 'SELECT' &&
+            field.fieldType != 'RADIO' &&
+            field.fieldType != 'CHECKBOX' &&
+            field.fieldType != 'TEXT_AREA' &&
+            field.fieldType != 'MULTI_SELECT' &&
+            this.getConditionResult(
+              field?.depends?.fieldStatus?.conditionForVisibility
+            )
+          "
+        >
+          <label [for]="field.fieldName">{{ field.label["en" || "it"] }}</label>
+          <div>
+            <input
+              *ngIf="
+                field.fieldType === 'PASSWORD' || field.textVal?.isPass === true
+              "
+              type="checkbox"
+              (click)="showPassword(field)"
+            />
+            <input
+              [type]="fieldTypeTranslator(field.fieldType)"
+              [name]="field.fieldName"
+              [formControl]="formArray.at(field.order)"
+            />
+            <!-- Checkbox per mostrare/nascondere la password -->
+          </div>
+        </div>
+
+        <!--
+                    Questo field viene mostrato solo se il fieldType è "textarea"
+                -->
+        <div
+          class="field-inner"
+          *ngIf="
+            field.fieldType === 'TEXT_AREA' &&
+            this.getConditionResult(
+              field?.depends?.fieldStatus?.conditionForVisibility
+            )
+          "
+        >
+          <label [for]="field.fieldName">{{ field.label["en" || "it"] }}</label>
+          <textarea
+            [name]="field.fieldName"
+            cols="50"
+            rows="10"
+            [formControl]="formArray.at(field.order)"
+          ></textarea>
+        </div>
+
+        <!--
+                    Questo field viene mostrato solo se il fieldType è "radio"
+                    I vari radio input (dello stesso field) devono avere lo stesso [name] per funzionare
+                -->
+        <div
+          class="field-inner"
+          *ngIf="
+            (field.fieldType === 'RADIO' ||
+              fieldTypeTranslator(field.fieldType) === 'radio') &&
+            this.getConditionResult(
+              field?.depends?.fieldStatus?.conditionForVisibility
+            )
+          "
+          class="radioInput"
+        >
+          <p>{{ field.label.en }}</p>
+          <div *ngFor="let element of field.selectableItems; let i = index">
+            <input
+              [type]="fieldTypeTranslator(field.fieldType)"
+              [name]="field.fieldName"
+              [value]="element"
+              [checked]="field.value.includes(element) ? 'true' : ''"
+              (change)="radioChange(field.order, element)"
+            />
+            <label [for]="field.fieldName">{{ element }}</label>
+          </div>
+        </div>
+
+        <!--
+                    Questo field viene mostrato solo se il fieldType è "checkbox"
+                -->
+        <div
+          class="field-inner"
+          *ngIf="
+            (field.fieldType === 'CHECKBOX' ||
+              fieldTypeTranslator(field.fieldType) === 'checkbox') &&
+            this.getConditionResult(
+              field?.depends?.fieldStatus?.conditionForVisibility
+            )
+          "
+        >
+          <div *ngFor="let element of field.selectableItems">
+            <input
+              [type]="fieldTypeTranslator(field.fieldType)"
+              [name]="field.fieldName"
+              [value]="field.selectableItems"
+              [checked]="
+                formArray.at(field.order).value?.includes(element) ? 'true' : ''
+              "
+              (change)="
+                checkBoxChange(
+                  element,
+                  formArray.at(field.order).value,
+                  field.order
+                )
+              "
+            />
+            <label [for]="field.fieldName">{{ element }}</label>
+          </div>
+        </div>
+
+        <!--
+                    Questo field viene mostrato solo se il fieldType è "select"
+                -->
+        <div
+          class="field-inner"
+          *ngIf="
+            (field.fieldType === 'SELECT' ||
+              fieldTypeTranslator(field.fieldType) === 'select') &&
+            this.getConditionResult(
+              field?.depends?.fieldStatus?.conditionForVisibility
+            )
+          "
+        >
+          <label [for]="field.fieldName">{{ field.label.en }}</label>
+          <select
+            [formControl]="formArray.at(field.order)"
+            [name]="field.fieldName"
+          >
+            <option
+              *ngFor="let element of field.selectableItems"
+              [value]="element"
+            >
+              {{ element }}
+            </option>
+          </select>
+        </div>
+
+        <!--
+                    Questo field viene mostrato solo se il fieldType è "multi_select"
+                -->
+        <div
+          class="field-inner"
+          *ngIf="
+            (field.fieldType === 'MULTI_SELECT' ||
+              fieldTypeTranslator(field.fieldType) === 'multi_select') &&
+            this.getConditionResult(
+              field?.depends?.fieldStatus?.conditionForVisibility
+            )
+          "
+        >
+          <label [for]="field.fieldName">{{ field.label.en }}</label>
+          <ng-select
+            [formControl]="formArray.at(field.order)"
+            *ngIf="field.selectableItems"
+            [items]="field.selectableItems"
+            [multiple]="true"
+            [closeOnSelect]="false"
+            [hideSelected]="false"
+            [bindLabel]="field.fieldName"
+          ></ng-select>
+        </div>
+      </div>
+
+      <div class="space-m"></div>
+
+      <!-- Buttons con funzioni utili al utente:
+                    Cancel - azzera i valori di tutti i campi
+                    Reset - porta la section allo stato iniziale (valori contenuti in field.value)
+                    Save - Salva i dati del form (in questo caso vengono solo mostrati a console),
+                        se il formArray non è valid (quindi non tutti i formControl sono valid) il
+                        pulsante Save non è cliccabile
+                -->
+      <div class="action-buttons-container">
+        <input
+          type="button"
+          class="cancel_button"
+          (click)="formArray.reset()"
+          value="Cancel"
+        />
+        <input
+          type="button"
+          class="reset_button"
+          (click)="resetInitialValues(section)"
+          value="Reset"
+        />
+        <input
+          type="button"
+          class="save_button"
+          (click)="showValues(section)"
+          value="Save"
+          [disabled]="formArray.valid ? false : true"
+        />
+      </div>
+      <div class="space-m"></div>
+    </form>
+  </div>
+</div>

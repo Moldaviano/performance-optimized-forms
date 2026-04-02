@@ -1,0 +1,129 @@
+@import "~@ng-select/ng-select/themes/default.theme.css";
+
+//TODO: rivedere flex
+
+div.section-container {
+  max-width: 100%;
+  min-width: 400px;
+
+  div.section {
+    width: 100%;
+    background-color: white;
+    border: 3px solid black;
+    border-radius: 13px;
+
+    div.section-name-container {
+      // width: 100%;
+      // background-image: linear-gradient(to right,#fe17a9,#4fb7d4, lime);
+      background-color: rgba(174, 164, 164, 0.27);
+      border: 1;
+      border-radius: 10px;
+
+      p.section-name {
+        // width: 100%;
+        text-align: center;
+        height: 100%;
+        font-family: "Trebuchet MS", "Lucida Sans Unicode", "Lucida Grande",
+          "Lucida Sans", Arial, sans-serif;
+        margin: 0;
+        padding: 10px;
+        font-size: 24px;
+        z-index: 0;
+      }
+    }
+
+    form.field-container {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      max-height: none;
+      // display: none;
+
+      div.field {
+        div.field-inner {
+          width: 100%;
+          display: flex;
+          flex-direction: row;
+          justify-content: space-between;
+          align-items: center;
+
+          input[type="text"],
+          input[type="number"],
+          input[type="date"],
+          input[type="password"],
+          input[type="multi_select"] {
+            height: 30px;
+            width: 300px;
+            font-size: 19px;
+          }
+
+          select,
+          ng-select,
+          ng-dropwdown-panel,
+          textarea {
+            height: 30px;
+            width: 300px;
+            font-size: 19px;
+          }
+
+          label {
+            font-size: 19px;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+          }
+
+          div.radioInput {
+            p {
+              font-size: 24px;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+div.action-buttons-container {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-around;
+  align-content: space-between;
+
+  input[type="button"] {
+    width: 75px;
+    height: 30px;
+    font-size: 19px;
+    border: 1px solid green;
+    border-radius: 25px;
+    background-color: blue;
+    color: white;
+  }
+
+  input[type="button"]:disabled {
+    background-color: rgba(128, 128, 128, 0.354);
+    color: rgb(124, 108, 108);
+  }
+}
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="password"],
+input[type="multi_select"],
+select,
+ng-select,
+textarea {
+  border-radius: 15px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  // border: 1px solid #66d035;
+  text-align: center;
+}
+
+.ng-valid:not(form) {
+  border: 3px solid lime;
+}
+
+.ng-invalid:not(form) {
+  border: 3px solid red;
+}
